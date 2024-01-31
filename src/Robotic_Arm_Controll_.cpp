@@ -20,7 +20,7 @@
 @date: 2020/9/23
 @modified by: Small Brian
 @date: 2021/7/20
-@brief: This program is used to control the robotic arm to pick up the product.
+@brief: This program is used to control the robotic arm to pick up the product and use modbus to control vacuum valve.
 @details: The program was created by unknown students from DAL, and I modified it to make it to communicate with Raspberry Pi via TCP/IP.
 Using the information that raspberry pi sent to control the robotic arm to pick up the product.
 Comments added by Small Brian.
@@ -151,12 +151,12 @@ int main()
 
 		char buf[256];
 		string Output;
-		bool isstoped = true; // When the robot arm finish task and stop, do not send command when it still moving.
+		bool isstoped = false; // Keyboard press "y" to stop the program
 		string ans;
         /*
         Below block added by Small Brian
         */
-		while (isstoped) 
+		while (!isstoped) 
 		{
 			// Send start command to Raspberry Pi
 			Output = "start"; 
@@ -179,7 +179,7 @@ int main()
 
                     float pos_x, pos_y, pos_y1, pos_z, angle_a, timego, cy;
                     float shape, timeused;
-                    string camera;
+                    string camera_cmd;
                     int is_arrival = 1;
                     pos_x = information[0]; // Coordinate of the object
                     pos_y = information[1]; 
@@ -196,13 +196,13 @@ int main()
                     ret = NMC_GroupSetParamF64(retDevID, GroupIndex, 0x32, 0, 1000);
                     ret = NMC_GroupSetParamF64(retDevID, GroupIndex, 0x33, 0, 1000);
 
-                    camera = "e"; // Stop the camera in case didn't close successfully last time
-                    sendResult = send(sock, camera.c_str(), camera.size() + 1, 0); 
+                    camera_cmd = "e"; // Stop the camera in case didn't close successfully last time
+                    sendResult = send(sock, camera_cmd.c_str(), camera_cmd.size() + 1, 0); 
                     // Correction the drift of the robot arm and the camera
                     float xx = 0, yy = 0, factor = 0.42; // factor is the ratio of the distance and the image pixel; measuere by pixel->mm experimentally.
                     xx = 454.836 + (pos_x * factor); 
                     yy = pos_y * factor;
-                    cout << "move to {  " << xx << ',' << yy << ',' << pos_z << ',' << angle_a << ',' << timego << '}' << endl;
+                    cout << "move to {  " << xx << ',' << yy << ',' << pos_z << ',' << angle_a << ',' << timego << '}' << endl; // for debug
                     Pos_T point = { xx, yy, pos_z,0,0,-180 }; // Move to the point to pick up the object
                     //cout << "In first point now " << endl;
                     NMC_GroupPtpCartAll(retDevID, GroupIndex, 63, &point); 
@@ -217,9 +217,9 @@ int main()
                         CloseDevice(retDevID, sleepTime, retGroupCount);
                         break;
                     }
-                    // If there
-                    camera = "s"; 
-                    sendResult = send(sock, camera.c_str(), camera.size() + 1, 0); //�ǰe�}�ҩ�ӫ��O  
+
+                    camera_cmd = "s"; // Open the camera again to check pick up status
+                    sendResult = send(sock, camera_cmd.c_str(), camera_cmd.size() + 1, 0); 
 
                     bytesReceived = recv(sock, buf, 256, 0);
                     recive = string(buf, 0, bytesReceived); // x,y,z,agle(0,1,2,3)
@@ -228,20 +228,19 @@ int main()
 
                     pos_x = information[0];
                     pos_y = information[1];
-                    is_arrival = information[3]; //�O�_����? 1����A0��s�y��
-                    
-                    xx += pos_x*0.42;//�y�мW�q 
-                    yy += pos_y*0.42;
+                    is_arrival = information[3]; 
+                    xx += pos_x*factor;
+                    yy += pos_y*factor;
 
                     float run_x = 0, run_y = 0;
                     run_x = xx;
                     run_y = yy;
 
-                    while (is_arrival == 0) //is_arrival == 0 means the robot arm is not arrived at the point, go to new point
+                    while (is_arrival == 0) //is_arrival == 0 means the robot arm doesn't pick up object succfessfully in the first time
                     {
                         cout << "Go to new point" << endl; // for debug
-                        camera = "e"; 
-                        sendResult = send(sock, camera.c_str(), camera.size() + 1, 0);
+                        camera_cmd = "e"; 
+                        sendResult = send(sock, camera_cmd.c_str(), camera_cmd.size() + 1, 0);
 
                         cout << "Move to {  " << run_x << ',' << run_y << ',' << pos_z << ',' << angle_a << ',' << timego << '}' << endl;
                         point = { run_x,run_y,pos_z,0,0,-180 };
@@ -251,30 +250,29 @@ int main()
                         ret = NMC_GroupSetParamF64(retDevID, GroupIndex, 0x33, 0, 1000); 
                         ret = NMC_GroupSetParamF64(retDevID, GroupIndex, 0x34, 0, 100);
 
-                        camera = "s"; 
-                        sendResult = send(sock, camera.c_str(), camera.size() + 1, 0);
+                        camera_cmd = "s"; 
+                        sendResult = send(sock, camera_cmd.c_str(), camera_cmd.size() + 1, 0);
                         bytesReceived = recv(sock, buf, 256, 0);
                         recive = string(buf, 0, bytesReceived); 
                         cout << recive << endl;
                         information = spilt_string(recive);
-
-                        is_arrival = information[3];
+                        is_arrival = information[3]; // Refresh status
 
                         if (is_arrival == 0) // If still now arrival, store now position in xx and yy, next time the robot arm will move by increment.
                         {
-                            pos_x = information[0]; //��s�y�� 
+                            pos_x = information[0]; // Position from the new image
                             pos_y = information[1];
-                            xx += pos_x*0.42; //�y�мW�q 
-                            yy += pos_y*0.42;
+                            xx += pos_x*factor; 
+                            yy += pos_y*factor;
                             run_x = xx;
-                            run_y = yy;							
+                            run_y = yy;
                         }
 
                     }
 
                     cout << "The point is correct" << endl;
-                    camera = "e"; // End of this loop
-                    sendResult = send(sock, camera.c_str(), camera.size() + 1, 0);
+                    camera_cmd = "e"; // End of this loop
+                    sendResult = send(sock, camera_cmd.c_str(), camera_cmd.size() + 1, 0);
                     cout << "ready to go down" << endl;
                     thread th_modbus(thread_modbus, ctx); 
                     th_modbus.detach();
@@ -288,7 +286,7 @@ int main()
                     ret = NMC_GroupSetParamF64(retDevID, GroupIndex, 0x32, 0, 1000);
                     ret = NMC_GroupSetParamF64(retDevID, GroupIndex, 0x33, 0, 1000);
 
-                    point = { 109,409,300,89,0,-180 }; //��m�y�ЫݽT�w 
+                    point = { 109,409,300,89,0,-180 }; 
                     NMC_GroupPtpCartAll(retDevID, GroupIndex, 63, &point);
                     ret = WaitCmdReached(retDevID, GroupIndex, retGroupAxisCount);
 
@@ -314,14 +312,14 @@ int main()
 				}
 				else
 				{
-					std::cout << "Not get the receive ! " << endl;
+					std::cout << "Not get the message from Pi ! " << endl;
 				}
 			}
 			else
 			{
 				cerr << "Lost connect to server, Err #" << WSAGetLastError() << endl; 
 			}
-			std::cout << "stop? y/n" << endl;
+			std::cout << "stop? y/n" << endl; // Must stop by this proceduce, otherwise robot arm might fall down immediately.
 			
 			std::cin >> ans;
 			if (ans == "y")
@@ -338,7 +336,7 @@ int main()
 				Pos_T point = { 454.5,0,755,89.6,-90,-90 };
 				NMC_GroupLine(retDevID, GroupIndex, 63, &point, &PMaxVel);
 				Sleep(10);
-				isstoped = false;
+				isstoped = true;
 			}
 
 		}

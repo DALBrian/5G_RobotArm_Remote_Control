@@ -65,7 +65,7 @@ while True:
     recv = recv.decode("ascii")
     ret, frame = cap.read()
     # Take photo when robot arm send 's'
-    if recv[0] =='s':
+    if recv[0] =='s': # When receive "start"
         # Taking shot
         t1 = time.time() 
         print('Start taking image.')
