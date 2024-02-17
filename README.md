@@ -14,10 +14,10 @@ The comparison of 4G/5G network will be shown in below.
 ## Objective Goal
 In this demo, we're going to use Raspberry Pi (for easily obtaine, you may use any other embedded device like ESP32 or ESP8266) and a 5G Wi-Fi hotspot device to transmit image which taken by a camera installed on the end-effector of a robitc arm. The cloud computating server will analysis the image and determine the best position of the end-effector to grap the object and send the command via 5G network to the robotic arm.
 ## Flowchart
-![5G手臂流程圖_small](https://hackmd.io/_uploads/BJ1YsNHFa.png)
+![Flowchart](image/Flowchart.png)
 
 ## Implementation
-![解說圖](https://hackmd.io/_uploads/HkUECEHKT.png)
+![Explain](image/Illustration.png)
 
 ## Comparison
 
